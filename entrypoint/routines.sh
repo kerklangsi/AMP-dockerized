@@ -100,10 +100,18 @@ configure_timezone() {
 }
 
 create_amp_user() {
-  # Create AMP user if it does not exist
+  # Create the AMP user and group with the specified UID and GID
+  echo "Configuring docker access..."
+  local GID="${DOCKER_GID}"
+  # try to detect it from the docker socket
+  if [ -z "${GID}" ] && [ -S "/var/run/docker.sock" ]; then
+    GID=$(stat -c '%g' /var/run/docker.sock)
+    echo "Detected docker socket GID: ${GID}"
+  fi
+
+  # Now create the user
   echo "Creating AMP user..."
-  if [ ! "$(getent passwd ${UID})" ]; then
-    # Create user
+  if ! getent passwd ${UID} > /dev/null 2>&1; then
     adduser \
       --uid ${UID} \
       --shell /bin/bash \
@@ -115,24 +123,25 @@ create_amp_user() {
   APP_USER=$(getent passwd ${UID} | awk -F ":" '{ print $1 }')
   echo "User Created: ${APP_USER} (${UID})"
 
-  # Grant AMP user access to the Docker Host.
-  echo "get docker group..."
+  # add the amp user to the docker group
   if getent group docker > /dev/null 2>&1; then
-    echo "Adding ${APP_USER} to docker group..."
     usermod -a -G docker ${APP_USER}
-  # docker group does not exist
-  elif [ ! -z "${DOCKER_GID}" ]; then
-    if [ ! "$(getent group ${GID})" ]; then
-      # Create group
-      addgroup \
-      --gid ${GID} \
-      amp
+  # elif DOCKER_GID is provided, create the docker group
+  elif [ ! -z "${GID}" ]; then
+    if ! getent group ${GID} > /dev/null 2>&1; then
+      addgroup --gid ${GID} docker
     fi
-    APP_GROUP=$(getent group ${GID} | awk -F ":" '{ print $1 }')
-    echo "Group Created: ${APP_GROUP} (${GID})"
+    usermod -a -G docker ${APP_USER}
   else
-    echo "Docker group not found. Skipping adding ${APP_USER} to docker group."
+    echo "Docker group not found and DOCKER_GID not provided; skipping docker group assignment."
   fi
+  # if not provided, use a default GID
+  if ! getent group ${GID} > /dev/null 2>&1; then
+    echo "Creating AMP group..."
+    addgroup --gid ${GID} amp
+  fi
+  APP_GROUP=$(getent group ${GID} | awk -F ":" '{ print $1 }')
+  echo "AMP group ready: ${APP_GROUP} (${GID})"
 }
 
 handle_error() {
