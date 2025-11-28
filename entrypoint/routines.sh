@@ -100,16 +100,7 @@ configure_timezone() {
 }
 
 create_amp_user() {
-  echo "Creating AMP group..."
-  if [ ! "$(getent group ${GID})" ]; then
-    # Create group
-    addgroup \
-    --gid ${GID} \
-    amp
-  fi
-  APP_GROUP=$(getent group ${GID} | awk -F ":" '{ print $1 }')
-  echo "Group Created: ${APP_GROUP} (${GID})"
-
+  # Create AMP user if it does not exist
   echo "Creating AMP user..."
   if [ ! "$(getent passwd ${UID})" ]; then
     # Create user
@@ -119,11 +110,29 @@ create_amp_user() {
       --no-create-home \
       --disabled-password \
       --gecos "" \
-      --ingroup ${APP_GROUP} \
       amp
   fi
   APP_USER=$(getent passwd ${UID} | awk -F ":" '{ print $1 }')
   echo "User Created: ${APP_USER} (${UID})"
+
+  # Grant AMP user access to the Docker Host.
+  echo "get docker group..."
+  if getent group docker > /dev/null 2>&1; then
+    echo "Adding ${APP_USER} to docker group..."
+    usermod -a -G docker ${APP_USER}
+  # docker group does not exist
+  elif [ ! -z "${DOCKER_GID}" ]; then
+    if [ ! "$(getent group ${GID})" ]; then
+      # Create group
+      addgroup \
+      --gid ${GID} \
+      amp
+    fi
+    APP_GROUP=$(getent group ${GID} | awk -F ":" '{ print $1 }')
+    echo "Group Created: ${APP_GROUP} (${GID})"
+  else
+    echo "Docker group not found. Skipping adding ${APP_USER} to docker group."
+  fi
 }
 
 handle_error() {
