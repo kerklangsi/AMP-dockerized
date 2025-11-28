@@ -48,11 +48,6 @@ check_data_volume() {
   if [ -d "${AMP_DATA_DIR}" ]; then
     chmod 755 "${AMP_DATA_DIR}"
   fi
-
-  echo "Data volume (/home/amp) is ok!"
-  if [ -d "${AMP_HOME}" ]; then
-    chmod 755 "${AMP_HOME}"
-  fi
 }
 
 check_file_permissions() {
@@ -131,7 +126,7 @@ create_amp_user() {
   fi
   APP_USER=$(getent passwd ${UID} | awk -F ":" '{ print $1 }')
   echo "User Created: ${APP_USER} (${UID})"
-  
+
   # add the amp user to the docker group
   if getent group docker > /dev/null 2>&1; then
     usermod -a -G docker ${APP_USER}
