@@ -30,6 +30,7 @@ check_data_volume() {
     
     echo "Beginning data migration..."
     mkdir -p "${AMP_DATA_DIR}"
+    chmod 755 "${AMP_DATA_DIR}"
 
     find "${AMP_HOME}" -mindepth 1 -maxdepth 1 \
       ! -name '.ampdata' \
@@ -43,7 +44,15 @@ check_data_volume() {
     echo "Migration complete."
   fi
 
-  echo "Data volume is ok!"
+  echo "Data volume (/home/amp/.ampdata) is ok!"
+  if [ -d "${AMP_DATA_DIR}" ]; then
+    chmod 755 "${AMP_DATA_DIR}"
+  fi
+
+  echo "Data volume (/home/amp) is ok!"
+  if [ -d "${AMP_HOME}" ]; then
+    chmod 755 "${AMP_HOME}"
+  fi
 }
 
 check_file_permissions() {
@@ -122,26 +131,28 @@ create_amp_user() {
   fi
   APP_USER=$(getent passwd ${UID} | awk -F ":" '{ print $1 }')
   echo "User Created: ${APP_USER} (${UID})"
-
   # add the amp user to the docker group
   if getent group docker > /dev/null 2>&1; then
     usermod -a -G docker ${APP_USER}
+    echo "Added ${APP_USER} to existing docker group."
   # elif DOCKER_GID is provided, create the docker group
   elif [ ! -z "${GID}" ]; then
     if ! getent group ${GID} > /dev/null 2>&1; then
       addgroup --gid ${GID} docker
     fi
     usermod -a -G docker ${APP_USER}
+    echo "docker (${GID})"
   else
-    echo "Docker group not found and DOCKER_GID not provided; skipping docker group assignment."
+    echo "Docker group not found and DOCKER_GID not provided."
   fi
   # if not provided, use a default GID
   if ! getent group ${GID} > /dev/null 2>&1; then
     echo "Creating AMP group..."
     addgroup --gid ${GID} amp
+    echo "amp (${GID})"
   fi
   APP_GROUP=$(getent group ${GID} | awk -F ":" '{ print $1 }')
-  echo "AMP group ready: ${APP_GROUP} (${GID})"
+  echo "Group Created: ${APP_GROUP} (${GID})"
 }
 
 handle_error() {
