@@ -58,9 +58,9 @@ check_file_permissions() {
   echo "Checking file permissions..."
   chown -R ${APP_USER}:${APP_GROUP} /home/amp
   if [ -w /home/amp ]; then
-    echo "File permissions set for ${APP_USER}:${APP_GROUP}; /home/amp is writable."
+    echo "File permissions set for ${APP_USER}:${APP_GROUP}. Directory /home/amp is writable."
   else
-    echo "Warning: /home/amp is not writable for ${APP_USER}:${APP_GROUP}."
+    echo "Warning: Directory /home/amp is not writable for ${APP_USER}:${APP_GROUP}."
   fi
 }
 
@@ -143,28 +143,30 @@ create_amp_user() {
   echo "User Created: ${APP_USER} (${UID})"
 
   if getent group docker > /dev/null 2>&1; then
-    local DOCKER_GROUP_NAME=$(getent group docker | awk -F ":" '{ print $1 }')
-    usermod -a -G ${DOCKER_GROUP_NAME} ${APP_USER}
-    APP_GROUP=${DOCKER_GROUP_NAME}
-    echo "Using docker group: ${DOCKER_GROUP_NAME} (${DOCKER_GROUP_GID})"
+    usermod -a -G docker ${APP_USER}
+    # Get docker group info
+    APP_GROUP=docker
+    echo "Use Docker group: ${APP_GROUP} (${DOCKER_GID})"
   elif [ ! -z "${DOCKER_GROUP_GID}" ]; then
     if ! getent group ${DOCKER_GROUP_GID} > /dev/null 2>&1; then
       echo "Creating docker group with GID ${DOCKER_GROUP_GID}..."
       addgroup --gid ${DOCKER_GROUP_GID} docker
     fi
     usermod -a -G docker ${APP_USER}
+    # Get docker group info
     APP_GROUP=docker
-    echo "Docker group created: docker (${DOCKER_GROUP_GID})"
+    echo "Docker group created: ${APP_GROUP} (${DOCKER_GROUP_GID})"
   else
     if ! getent group ${AMP_GID} > /dev/null 2>&1; then
       echo "Creating AMP group with GID ${AMP_GID}..."
       addgroup --gid ${AMP_GID} amp
     fi
     usermod -a -G amp ${APP_USER}
+    # Get amp group info
     APP_GROUP=amp
-    echo "AMP group created: amp (${AMP_GID})"
+    echo "AMP group created: ${APP_GROUP} (${AMP_GID})"
   fi
-  echo "AMP User: ${APP_USER}, Group: ${APP_GROUP}"
+  echo "AMP User: ${APP_USER} , Group: ${APP_GROUP}"
 }
 
 handle_error() {
