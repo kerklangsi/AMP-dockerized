@@ -1,9 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
+# Docker wrapper to adjust volume mounts for AMP container
 REAL_DOCKER="/usr/bin/docker"
 CONTAINER_PREFIX="/home/amp"
 
+# Normalize a path by removing trailing slashes
 normalize_path() {
   local value="$1"
   if [ -z "$value" ]; then
@@ -16,6 +18,7 @@ normalize_path() {
   echo "$value"
 }
 
+# Decode escaped characters in mount paths
 decode_mount_path() {
   local path="$1"
   path="${path//\\040/ }"
@@ -25,6 +28,7 @@ decode_mount_path() {
   echo "$path"
 }
 
+# Detect host mount prefix for the container prefix
 detect_host_prefix() {
   local mount_line
   mount_line=$(awk -v mp="$CONTAINER_PREFIX" '$5==mp {print $4; exit}' /proc/self/mountinfo 2>/dev/null || true)
@@ -35,6 +39,7 @@ detect_host_prefix() {
   decode_mount_path "$mount_line"
 }
 
+# Determine HOST_PREFIX
 HOST_PREFIX="${AMP_HOST_HOME:-}"
 if [ -z "$HOST_PREFIX" ]; then
   HOST_PREFIX="$(detect_host_prefix)"
@@ -42,17 +47,19 @@ fi
 HOST_PREFIX="$(normalize_path "$HOST_PREFIX")"
 CONTAINER_PREFIX="$(normalize_path "$CONTAINER_PREFIX")"
 
+# If no host prefix detected or same as container, run docker as-is
 if [ -z "$HOST_PREFIX" ] || [ "$HOST_PREFIX" = "$CONTAINER_PREFIX" ]; then
   exec "$REAL_DOCKER" "$@"
 fi
 
+# Helper to split quoted values
 split_with_quote() {
   local value="$1"
   local quote=""
-  if [ "${value#"}" != "$value" ] && [ "${value%"}" != "$value" ]; then
-    quote="""
-    value="${value#"}"
-    value="${value%"}"
+  if [ "${value#\"}" != "$value" ] && [ "${value%\"}" != "$value" ]; then
+    quote='"'
+    value="${value#\"}"
+    value="${value%\"}"
   elif [ "${value#\'}" != "$value" ] && [ "${value%\'}" != "$value" ]; then
     quote="'"
     value="${value#\'}"
@@ -61,6 +68,7 @@ split_with_quote() {
   printf '%s|%s' "$quote" "$value"
 }
 
+# Rewrite volume argument
 rewrite_volume_arg() {
   local original="$1"
   local src_with_quotes="${original%%:*}"
@@ -79,6 +87,7 @@ rewrite_volume_arg() {
   echo "$original"
 }
 
+# Rewrite mount argument
 rewrite_mount_arg() {
   local original="$1"
   IFS=',' read -ra parts <<<"$original"
@@ -104,6 +113,7 @@ rewrite_mount_arg() {
   echo "${updated[*]}"
 }
 
+# Adjust all arguments
 adjust_args() {
   local -a result=()
   while [ "$#" -gt 0 ]; do
@@ -151,5 +161,6 @@ adjust_args() {
   printf '%s\0' "${result[@]}"
 }
 
+# Transform and execute
 mapfile -d '' transformed < <(adjust_args "$@")
 exec "$REAL_DOCKER" "${transformed[@]}"
