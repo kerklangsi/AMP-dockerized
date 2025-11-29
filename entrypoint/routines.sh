@@ -108,16 +108,42 @@ configure_release_stream() {
 
 configure_ads_defaults() {
   local provision_settings=""
+  local auth_url="${AMP_AUTH_URL}"
 
   if [ -n "${AMP_LICENCE}" ]; then
     echo "Applying AMP licence key to ADS defaults."
     provision_settings+="ADSModule.Defaults.NewInstanceKey=${AMP_LICENCE};"
   fi
 
+  if [ -z "${auth_url}" ]; then
+    if [ "${AMP_USE_HOST_NETWORK:-false}" = "true" ]; then
+      auth_url="http://127.0.0.1:${PORT}"
+    else
+      # Use container IP when bridging so nested Docker can reach ADS.
+      local container_ip=""
+      container_ip=$(ip -4 addr show scope global | awk '/inet / {print $2}' | cut -d/ -f1 | head -n1)
+      if [ -n "${container_ip}" ]; then
+        auth_url="http://${container_ip}:${PORT}"
+      fi
+    fi
+  fi
+
+  if [ -n "${auth_url}" ]; then
+    echo "Overriding auth server URL defaults to ${auth_url}."
+    provision_settings+="Core.Login.AuthServerURL=${auth_url};"
+    provision_settings+="ADSModule.Defaults.DefaultAuthServerURL=${auth_url};"
+  fi
+
   if [ "${AMP_USE_HOST_NETWORK:-false}" = "true" ]; then
     echo "Configuring new Docker instances to use host networking."
     provision_settings+="ADSModule.Defaults.UseDockerHostNetwork=True;"
     provision_settings+="ADSModule.Network.UseDockerHostNetwork=True;"
+  fi
+
+  if [ -n "${AMP_DOCKER_NETWORK}" ]; then
+    echo "Setting default Docker network to ${AMP_DOCKER_NETWORK}."
+    provision_settings+="ADSModule.Defaults.DockerNetwork=${AMP_DOCKER_NETWORK};"
+    provision_settings+="ADSModule.Network.DockerNetwork=${AMP_DOCKER_NETWORK};"
   fi
 
   if [ -n "${provision_settings}" ]; then
