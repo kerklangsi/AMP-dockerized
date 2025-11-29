@@ -9,6 +9,7 @@ ENV PORT=8080
 ENV USERNAME=admin
 ENV PASSWORD=password
 ENV IPBINDING=0.0.0.0
+ENV AMP_HOST_HOME=
 
 ENV AMP_AUTO_UPDATE=true
 ENV AMP_RELEASE_STREAM=Mainline
@@ -236,6 +237,8 @@ RUN install -m 0755 -d /etc/apt/keyrings && \
 # Set up environment
 COPY entrypoint /opt/entrypoint
 RUN chmod -R +x /opt/entrypoint && \
-    find /opt/entrypoint -type f -name "*.sh" -exec sed -i 's/\r$//' {} \;
+    find /opt/entrypoint -type f -name "*.sh" -exec sed -i 's/\r$//' {} \; && \
+    install -m 0755 /opt/entrypoint/docker-wrapper.sh /usr/local/bin/docker && \
+    sed -i 's/\r$//' /usr/local/bin/docker
 
 ENTRYPOINT ["/opt/entrypoint/main.sh"]
