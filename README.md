@@ -133,7 +133,6 @@ For example, with Minecraft, click on the "M" section, then scroll to "Minecraft
 |-------|----------------------------------------------------------------------|---------------|
 | `UID` | The ID of the user (on the host) who will own the ampdata volume.    | `1000`        |
 | `GID` | The ID of the group for the user above.                              | `1000`        |
-| `AMP_HOST_HOME` | Optional: absolute host path that is bind-mounted to `/home/amp` inside the container. Required when exposing the host Docker socket so nested containers use the correct host path for mounts. | *(unset)* |
 
 When not specified, these both default to ID `1000`; i.e. the first non-system user on the host.
 
@@ -163,7 +162,6 @@ By default, AMP will automatically update when this container reboots. You can u
 ### Docker Defaults
 | Name | Description | Default Value |
 |------|-------------|---------------|
-| `AMP_USE_HOST_NETWORK` | When set to `true`, AMP configures newly created Docker instances (e.g. Minecraft servers) to launch with host networking so they inherit the host's network stack. | `false` |
 | `AMP_LICENCE` | licence key that AMP will apply to `ADSModule.Defaults.NewInstanceKey`, allowing new instances to auto-populate their licence. | *(unset)* |
 
 ## Volumes

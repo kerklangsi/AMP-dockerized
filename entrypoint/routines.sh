@@ -111,12 +111,6 @@ configure_ads_defaults() {
     echo "Applying AMP licence key to ADS defaults."
     provision_settings+="ADSModule.Defaults.NewInstanceKey=${AMP_LICENCE};"
   fi
-  # Configure host networking for Docker instances if requested
-  if [ "${AMP_USE_HOST_NETWORK:-false}" = "true" ]; then
-    echo "Configuring new Docker instances to use host networking."
-    provision_settings+="ADSModule.Defaults.UseDockerHostNetwork=True;"
-    provision_settings+="ADSModule.Network.UseDockerHostNetwork=True;"
-  fi
   # Apply the settings if any were specified
   if [ -n "${provision_settings}" ]; then
     if ! run_amp_command "ReconfigureInstance ADS01 \"${provision_settings}\""; then
@@ -125,40 +119,6 @@ configure_ads_defaults() {
   fi
 }
 
-configure_docker_network() {
-  # Configure Docker networking for ADS instance
-  local host_network=$(echo "${AMP_USE_HOST_NETWORK:-false}" | tr '[:upper:]' '[:lower:]')
-  if [ "${host_network}" = "true" ]; then
-    echo "Host networking is enabled; skipping Docker bridge configuration."
-    return
-  fi
-  # Configure Docker bridge IP for ADS
-  local bridge_ip
-  bridge_ip=$(ip -4 route show default 2>/dev/null | awk '/default/ {print $3; exit}')
- # If unable to determine bridge IP, warn and skip
-  if [ -z "${bridge_ip}" ]; then
-    echo "Warning: Unable to determine Docker bridge gateway; leaving ADS bridge settings unchanged."
-    return
-  fi
-  echo "Configuring ADS to use Docker bridge gateway ${bridge_ip}..."
-  # Apply basic network settings
-  local basic_settings=(
-    "ADSModule.Network.DefaultIPBinding=${bridge_ip}"
-    "ADSModule.Defaults.DefaultIPBinding=${bridge_ip}"
-  )
-  # Apply each setting
-  local setting
-  for setting in "${basic_settings[@]}"; do
-    if ! run_amp_command "ReconfigureInstance ADS01 \"${setting}\""; then
-      echo "Warning: Failed to apply ${setting}"
-    fi
-  done
-  # Configure Auth Server URL
-  local auth_url="http://${bridge_ip}:${PORT}/"
-  if ! run_amp_command "ReconfigureInstance ADS01 \"ADSModule.Defaults.DefaultAuthServerURL=${auth_url}\""; then
-    echo "Warning: Failed to apply ADSModule.Defaults.DefaultAuthServerURL"
-  fi
-}
 
 # Configure timezone
 configure_timezone() {
@@ -222,8 +182,6 @@ create_amp_user() {
     echo "AMP group created: ${APP_GROUP} (${AMP_GID})"
   fi
   echo "AMP User: ${APP_USER} , Group: ${APP_GROUP}"
-  export APP_USER
-  export APP_GROUP
 }
 
 # Error handler

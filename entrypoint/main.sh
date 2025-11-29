@@ -51,8 +51,6 @@ configure_release_stream
 
 configure_ads_defaults
 
-configure_docker_network
-
 if [ "${AMP_AUTO_UPDATE}" = "true" ]; then
   upgrade_instances
 else
