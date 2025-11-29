@@ -106,6 +106,27 @@ configure_release_stream() {
   done
 }
 
+configure_ads_defaults() {
+  local provision_settings=""
+
+  if [ -n "${AMP_LICENCE}" ]; then
+    echo "Applying AMP licence key to ADS defaults."
+    provision_settings+="ADSModule.Defaults.NewInstanceKey=${AMP_LICENCE};"
+  fi
+
+  if [ "${AMP_USE_HOST_NETWORK:-false}" = "true" ]; then
+    echo "Configuring new Docker instances to use host networking."
+    provision_settings+="ADSModule.Defaults.UseDockerHostNetwork=True;"
+    provision_settings+="ADSModule.Network.UseDockerHostNetwork=True;"
+  fi
+
+  if [ -n "${provision_settings}" ]; then
+    if ! run_amp_command "ReconfigureInstance ADS01 \"${provision_settings}\""; then
+      echo "Warning: Failed to apply ADS default settings (${provision_settings})."
+    fi
+  fi
+}
+
 configure_timezone() {
   echo "Configuring timezone..."
   ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ >/etc/timezone
