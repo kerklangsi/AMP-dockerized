@@ -12,6 +12,8 @@ ENV IPBINDING=0.0.0.0
 ENV AMP_HOST_HOME=
 ENV AMP_LICENCE=
 ENV AMP_USE_HOST_NETWORK=false
+ENV AMP_AUTH_URL=
+ENV AMP_DOCKER_NETWORK=
 
 ENV AMP_AUTO_UPDATE=true
 ENV AMP_RELEASE_STREAM=Mainline
@@ -76,6 +78,7 @@ ARG AMPDEPS="\
     git-lfs \
     gnupg \
     iputils-ping \
+    iproute2 \
     libc++-dev \
     libc6 \
     libatomic1 \
