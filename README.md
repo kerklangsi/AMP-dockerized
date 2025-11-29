@@ -165,6 +165,10 @@ By default, AMP will automatically update when this container reboots. You can u
 |------|-------------|---------------|
 | `AMP_USE_HOST_NETWORK` | When set to `true`, AMP configures newly created Docker instances (e.g. Minecraft servers) to launch with host networking so they inherit the host's network stack. | `false` |
 | `AMP_LICENCE` | Optional licence key that AMP will apply to `ADSModule.Defaults.NewInstanceKey`, allowing new instances to auto-populate their licence. | *(unset)* |
+| `AMP_AUTH_URL` | Optional URL that replaces AMP's auth server endpoints (`Core.Login.AuthServerURL`, `ADSModule.Defaults.DefaultAuthServerURL`). Useful when nested Docker containers must reach the main panel via a specific host/IP. | *(unset)* |
+| `AMP_DOCKER_NETWORK` | Optional Docker network name that AMP uses for new containerized instances (`ADSModule.Defaults.DockerNetwork`, `ADSModule.Network.DockerNetwork`). Helps when you want AMP-managed containers to join a custom bridge. | *(unset)* |
+
+When `AMP_AUTH_URL` is not provided, the container automatically falls back to `http://127.0.0.1:${PORT}` if host networking is enabled, or to the container's bridge IP and exposed port when running on a bridged network. This keeps nested Docker workloads pointed at a reachable AMP backend without extra manual configuration.
 
 ## Volumes
 
