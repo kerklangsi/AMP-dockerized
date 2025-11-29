@@ -160,6 +160,12 @@ Example: `TZ=America/Denver`
 
 By default, AMP will automatically update when this container reboots. You can update AMP using the web UI as well - AMP will alert you when an update is available through its UI. The updates to this container image are not directly tied to AMP updates. Think of this container more like an all-in-one "operating system" for AMP. New versions of this container are only necessary when AMP is not working correctly. If you would like to disable automatic updates on container reboot, you can set `AMP_AUTO_UPDATE` to `false`.
 
+### Docker Defaults
+| Name | Description | Default Value |
+|------|-------------|---------------|
+| `AMP_USE_HOST_NETWORK` | When set to `true`, AMP configures newly created Docker instances (e.g. Minecraft servers) to launch with host networking so they inherit the host's network stack. | `false` |
+| `AMP_LICENCE` | Optional licence key that AMP will apply to `ADSModule.Defaults.NewInstanceKey`, allowing new instances to auto-populate their licence. | *(unset)* |
+
 ## Volumes
 
 > [!CAUTION]
