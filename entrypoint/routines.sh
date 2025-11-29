@@ -116,7 +116,7 @@ create_amp_user() {
   # AMP user/group
   local AMP_GID="${GID}"
   local DOCKER_GROUP_GID="${DOCKER_GID}"
-
+  # try to DOCKER_GROUP_GID detect from docker socket
   if [ -z "${DOCKER_GROUP_GID}" ] && [ -S "/var/run/docker.sock" ]; then
     DOCKER_GROUP_GID=$(stat -c '%g' /var/run/docker.sock)
     if [ "${DOCKER_GROUP_GID}" = "0" ]; then
@@ -125,10 +125,12 @@ create_amp_user() {
     else
       echo "Detected docker socket GID: ${DOCKER_GROUP_GID}"
     fi
+  # Else, use AMP_GID
   else
     echo "docker socket not found. Using default AMP GID: ${AMP_GID}"
   fi
-
+  
+  # Create AMP user
   echo "Creating AMP user..."
   if ! getent passwd ${UID} > /dev/null 2>&1; then
     adduser \
@@ -142,27 +144,27 @@ create_amp_user() {
   APP_USER=$(getent passwd ${UID} | awk -F ":" '{ print $1 }')
   echo "User Created: ${APP_USER} (${UID})"
 
+  # Add AMP user to docker group if it exists
   if getent group docker > /dev/null 2>&1; then
     usermod -a -G docker ${APP_USER}
-    # Get docker group info
     APP_GROUP=docker
     echo "Use Docker group: ${APP_GROUP} (${DOCKER_GID})"
+  # If DOCKER_GROUP_GID is specified, create/use that group
   elif [ ! -z "${DOCKER_GROUP_GID}" ]; then
     if ! getent group ${DOCKER_GROUP_GID} > /dev/null 2>&1; then
       echo "Creating docker group with GID ${DOCKER_GROUP_GID}..."
       addgroup --gid ${DOCKER_GROUP_GID} docker
     fi
     usermod -a -G docker ${APP_USER}
-    # Get docker group info
     APP_GROUP=docker
     echo "Docker group created: ${APP_GROUP} (${DOCKER_GROUP_GID})"
+  # Otherwise, create/use amp group
   else
     if ! getent group ${AMP_GID} > /dev/null 2>&1; then
       echo "Creating AMP group with GID ${AMP_GID}..."
       addgroup --gid ${AMP_GID} amp
     fi
     usermod -a -G amp ${APP_USER}
-    # Get amp group info
     APP_GROUP=amp
     echo "AMP group created: ${APP_GROUP} (${AMP_GID})"
   fi
