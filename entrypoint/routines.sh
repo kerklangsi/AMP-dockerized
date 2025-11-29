@@ -5,13 +5,12 @@ check_data_volume() {
   # This function allows existing users to simply change their mount point in the container, 
   # without needing to do any complicated remapping of their host data.
   echo "Checking data volume..."
-
   local AMP_HOME="/home/amp"
   local AMP_DATA_DIR="${AMP_HOME}/.ampdata"
   local AMP_DOCKERIZED_DIR="${AMP_DATA_DIR}/.amp-dockerized"
   local LEGACY_INSTANCES_JSON="${AMP_HOME}/instances.json"
   local LEGACY_INSTANCES_DIR="${AMP_HOME}/instances"
-
+  # Check if migration is needed
   if [ -f "${LEGACY_INSTANCES_JSON}" ] || [ -d "${LEGACY_INSTANCES_DIR}" ]; then
     echo "Updated data volume detected. Migration is required."
     # At this point we have detected that the contents of .ampdata are mapped to /home/amp, which is expected for V24 volume migration.
@@ -27,19 +26,15 @@ check_data_volume() {
       echo "Empty .ampdata directory detected. Removing..."
       rmdir "${AMP_DATA_DIR}"
     fi
-    
     echo "Beginning data migration..."
     mkdir -p "${AMP_DATA_DIR}"
-
     find "${AMP_HOME}" -mindepth 1 -maxdepth 1 \
       ! -name '.ampdata' \
       ! -name 'scripts' \
       -exec mv {} "${AMP_DATA_DIR}" \;
-
     # For future use, we will leave a fingerprint indicating that a migration took place
     mkdir -p "${AMP_DOCKERIZED_DIR}"
     touch "${AMP_DOCKERIZED_DIR}/.v24_volume_migrated"
-
     echo "Migration complete."
   fi
  # Verify that the data volume is writable
@@ -54,6 +49,7 @@ check_data_volume() {
   fi
 }
 
+# Configure file permissions
 check_file_permissions() {
   echo "Checking file permissions..."
   chown -R ${APP_USER}:${APP_GROUP} /home/amp
@@ -64,6 +60,7 @@ check_file_permissions() {
   fi
 }
 
+# Configure main ADS instance
 configure_main_instance() {
   echo "Checking ADS instance existence..."
   if ! does_main_instance_exist; then
@@ -73,11 +70,11 @@ configure_main_instance() {
       handle_error "Failed to create ADS instance. Please check your configuration."
     fi
   fi
-
   echo "Setting ADS instance to start on boot..."
   run_amp_command "ShowInstanceInfo ADS01" | grep "Start on Boot" | grep -q "No" && run_amp_command "SetStartBoot ADS01 yes" || true
 }
 
+# Configure release stream for all instances
 configure_release_stream() {
   echo "Setting release stream to ${AMP_RELEASE_STREAM}..."
   # Example Output from ShowInstancesList:
@@ -106,46 +103,21 @@ configure_release_stream() {
   done
 }
 
+# Configure ADS defaults for new instances
 configure_ads_defaults() {
   local provision_settings=""
-  local auth_url="${AMP_AUTH_URL}"
-
+  # Apply licence key to new instances if provided
   if [ -n "${AMP_LICENCE}" ]; then
     echo "Applying AMP licence key to ADS defaults."
     provision_settings+="ADSModule.Defaults.NewInstanceKey=${AMP_LICENCE};"
   fi
-
-  if [ -z "${auth_url}" ]; then
-    if [ "${AMP_USE_HOST_NETWORK:-false}" = "true" ]; then
-      auth_url="http://127.0.0.1:${PORT}"
-    else
-      # Use container IP when bridging so nested Docker can reach ADS.
-      local container_ip=""
-      container_ip=$(ip -4 addr show scope global | awk '/inet / {print $2}' | cut -d/ -f1 | head -n1)
-      if [ -n "${container_ip}" ]; then
-        auth_url="http://${container_ip}:${PORT}"
-      fi
-    fi
-  fi
-
-  if [ -n "${auth_url}" ]; then
-    echo "Overriding auth server URL defaults to ${auth_url}."
-    provision_settings+="Core.Login.AuthServerURL=${auth_url};"
-    provision_settings+="ADSModule.Defaults.DefaultAuthServerURL=${auth_url};"
-  fi
-
+  # Configure host networking for Docker instances if requested
   if [ "${AMP_USE_HOST_NETWORK:-false}" = "true" ]; then
     echo "Configuring new Docker instances to use host networking."
     provision_settings+="ADSModule.Defaults.UseDockerHostNetwork=True;"
     provision_settings+="ADSModule.Network.UseDockerHostNetwork=True;"
   fi
-
-  if [ -n "${AMP_DOCKER_NETWORK}" ]; then
-    echo "Setting default Docker network to ${AMP_DOCKER_NETWORK}."
-    provision_settings+="ADSModule.Defaults.DockerNetwork=${AMP_DOCKER_NETWORK};"
-    provision_settings+="ADSModule.Network.DockerNetwork=${AMP_DOCKER_NETWORK};"
-  fi
-
+  # Apply the settings if any were specified
   if [ -n "${provision_settings}" ]; then
     if ! run_amp_command "ReconfigureInstance ADS01 \"${provision_settings}\""; then
       echo "Warning: Failed to apply ADS default settings (${provision_settings})."
@@ -153,14 +125,50 @@ configure_ads_defaults() {
   fi
 }
 
+configure_docker_network() {
+  # Configure Docker networking for ADS instance
+  local host_network=$(echo "${AMP_USE_HOST_NETWORK:-false}" | tr '[:upper:]' '[:lower:]')
+  if [ "${host_network}" = "true" ]; then
+    echo "Host networking is enabled; skipping Docker bridge configuration."
+    return
+  fi
+  # Configure Docker bridge IP for ADS
+  local bridge_ip
+  bridge_ip=$(ip -4 route show default 2>/dev/null | awk '/default/ {print $3; exit}')
+ # If unable to determine bridge IP, warn and skip
+  if [ -z "${bridge_ip}" ]; then
+    echo "Warning: Unable to determine Docker bridge gateway; leaving ADS bridge settings unchanged."
+    return
+  fi
+  echo "Configuring ADS to use Docker bridge gateway ${bridge_ip}..."
+  # Apply basic network settings
+  local basic_settings=(
+    "ADSModule.Network.DefaultIPBinding=${bridge_ip}"
+    "ADSModule.Defaults.DefaultIPBinding=${bridge_ip}"
+  )
+  # Apply each setting
+  local setting
+  for setting in "${basic_settings[@]}"; do
+    if ! run_amp_command "ReconfigureInstance ADS01 \"${setting}\""; then
+      echo "Warning: Failed to apply ${setting}"
+    fi
+  done
+  # Configure Auth Server URL
+  local auth_url="http://${bridge_ip}:${PORT}/"
+  if ! run_amp_command "ReconfigureInstance ADS01 \"ADSModule.Defaults.DefaultAuthServerURL=${auth_url}\""; then
+    echo "Warning: Failed to apply ADSModule.Defaults.DefaultAuthServerURL"
+  fi
+}
+
+# Configure timezone
 configure_timezone() {
   echo "Configuring timezone..."
   ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ >/etc/timezone
   dpkg-reconfigure --frontend noninteractive tzdata
 }
 
+# AMP user/group
 create_amp_user() {
-  # AMP user/group
   local AMP_GID="${GID}"
   local DOCKER_GROUP_GID="${DOCKER_GID}"
   # try to DOCKER_GROUP_GID detect from docker socket
@@ -176,7 +184,6 @@ create_amp_user() {
   else
     echo "docker socket not found. Using default AMP GID: ${AMP_GID}"
   fi
-  
   # Create AMP user
   echo "Creating AMP user..."
   if ! getent passwd ${UID} > /dev/null 2>&1; then
@@ -190,7 +197,6 @@ create_amp_user() {
   fi
   APP_USER=$(getent passwd ${UID} | awk -F ":" '{ print $1 }')
   echo "User Created: ${APP_USER} (${UID})"
-
   # Add AMP user to docker group if it exists
   if getent group docker > /dev/null 2>&1; then
     usermod -a -G docker ${APP_USER}
@@ -216,8 +222,11 @@ create_amp_user() {
     echo "AMP group created: ${APP_GROUP} (${AMP_GID})"
   fi
   echo "AMP User: ${APP_USER} , Group: ${APP_GROUP}"
+  export APP_USER
+  export APP_GROUP
 }
 
+# Error handler
 handle_error() {
   # Prints a nice error message and exits.
   # Usage: handle_error "Error message"
@@ -230,6 +239,7 @@ handle_error() {
   exit 1
 }
 
+# Monitor AMP for pending tasks
 monitor_amp() {
   # Periodically process pending tasks (e.g. upgrade, reboots, ...)
   while true; do
@@ -238,6 +248,7 @@ monitor_amp() {
   done
 }
 
+# Run user-provided startup script
 run_startup_script() {
   # Users may provide their own startup script for installing dependencies, etc.
   STARTUP_SCRIPT="/home/amp/scripts/startup.sh"
@@ -248,6 +259,7 @@ run_startup_script() {
   fi
 }
 
+# Graceful shutdown
 shutdown() {
   echo "Shutting down... (Signal ${1})"
   if [ -n "${AMP_STARTED}" ] && [ "${AMP_STARTED}" -eq 1 ] && [ "${1}" != "KILL" ]; then
@@ -256,6 +268,7 @@ shutdown() {
   exit 0
 }
 
+# Start AMP
 start_amp() {
   echo "Starting AMP..."
   run_amp_command "StartBoot"
@@ -263,12 +276,14 @@ start_amp() {
   echo "AMP Started!"
 }
 
+# Stop AMP
 stop_amp() {
   echo "Stopping AMP..."
   run_amp_command "StopAll"
   echo "AMP Stopped."
 }
 
+# Upgrade instances
 upgrade_instances() {
   echo "Upgrading instances..."
   run_amp_command "UpgradeAll" | consume_progress_bars

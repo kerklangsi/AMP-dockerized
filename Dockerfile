@@ -12,8 +12,6 @@ ENV IPBINDING=0.0.0.0
 ENV AMP_HOST_HOME=
 ENV AMP_LICENCE=
 ENV AMP_USE_HOST_NETWORK=false
-ENV AMP_AUTH_URL=
-ENV AMP_DOCKER_NETWORK=
 
 ENV AMP_AUTO_UPDATE=true
 ENV AMP_RELEASE_STREAM=Mainline
@@ -49,6 +47,8 @@ RUN apt-get update && \
     /tmp/* \
     /var/lib/apt/lists/* \
     /var/tmp/*
+
+# Set up UTF-8 locales
 RUN sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
     dpkg-reconfigure --frontend=noninteractive locales && \
     update-locale LANG=en_US.UTF-8
@@ -67,7 +67,6 @@ RUN apt-get update && \
     /var/tmp/*
 
 # Declare and install AMP dependencies
-
 # AMP core dependencies
 ARG AMPDEPS="\
     bzip2 \
@@ -124,6 +123,7 @@ ARG WINEXVFB="\
     xauth \
     xvfb"
 
+# Install AMP dependencies based on architecture
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
         dpkg --add-architecture aarch64 && \
         apt-get update && \

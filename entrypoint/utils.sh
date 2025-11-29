@@ -18,6 +18,7 @@ get_main_instance_name() {
   fi
 }
 
+# Check if the main instance exists
 does_main_instance_exist() {
   local main_name
   main_name=$(get_main_instance_name)
@@ -27,14 +28,17 @@ does_main_instance_exist() {
   return 0
 }
 
+# Run AMP command as APP_USER
 run_amp_command() {
-  su ${APP_USER} --command "ampinstmgr $1"
+  su --preserve-environment ${APP_USER} --command "ampinstmgr $1"
 }
 
+# Run AMP command silently (without progress bars)
 run_amp_command_silently() {
-  su ${APP_USER} --command "ampinstmgr --silent $1"
+  su --preserve-environment ${APP_USER} --command "ampinstmgr --silent $1"
 }
 
+# Trap signals with arguments
 trap_with_arg() {
   # Credit https://stackoverflow.com/a/2183063/2364405
   func="$1" ; shift
