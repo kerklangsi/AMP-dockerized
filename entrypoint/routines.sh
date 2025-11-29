@@ -104,16 +104,19 @@ configure_timezone() {
 }
 
 create_amp_user() {
-  # Create the AMP user and group with the specified UID and GID
-  echo "Configuring docker access..."
-  local GID="${DOCKER_GID}"
-  # try to detect it from the docker socket
-  if [ -z "${GID}" ] && [ -S "/var/run/docker.sock" ]; then
-    GID=$(stat -c '%g' /var/run/docker.sock)
-    echo "Detected docker socket GID: ${GID}"
+  # AMP user/group
+  local DOCKER_GROUP_GID="${DOCKER_GID}"
+
+  if [ -z "${DOCKER_GROUP_GID}" ] && [ -S "/var/run/docker.sock" ]; then
+    DOCKER_GROUP_GID=$(stat -c '%g' /var/run/docker.sock)
+    if [ "${DOCKER_GROUP_GID}" = "0" ]; then
+      echo "Docker socket owned by root; skipping docker group assignment."
+      DOCKER_GROUP_GID=""
+    else
+      echo "Detected docker socket GID: ${DOCKER_GROUP_GID}"
+    fi
   fi
 
-  # Now create the user
   echo "Creating AMP user..."
   if ! getent passwd ${UID} > /dev/null 2>&1; then
     adduser \
@@ -127,25 +130,27 @@ create_amp_user() {
   APP_USER=$(getent passwd ${UID} | awk -F ":" '{ print $1 }')
   echo "User Created: ${APP_USER} (${UID})"
 
-  # add the amp user to the docker group
   if getent group docker > /dev/null 2>&1; then
     usermod -a -G docker ${APP_USER}
-  # elif DOCKER_GID is provided, create the docker group
-  elif [ ! -z "${GID}" ]; then
-    if ! getent group ${GID} > /dev/null 2>&1; then
-      addgroup --gid ${GID} docker
+    APP_GROUP=$(getent group ${DOCKER_GID} | awk -F ":" '{ print $1 }')
+    echo "Docker group ready: ${APP_GROUP} (${DOCKER_GID})"
+  elif [ ! -z "${DOCKER_GROUP_GID}" ]; then
+    if ! getent group ${DOCKER_GROUP_GID} > /dev/null 2>&1; then
+      echo "Creating docker group with GID ${DOCKER_GROUP_GID}..."
+      addgroup --gid ${DOCKER_GROUP_GID} docker
     fi
     usermod -a -G docker ${APP_USER}
+    APP_GROUP=$(getent group ${DOCKER_GROUP_GID} | awk -F ":" '{ print $1 }')
+    echo "Local group ready: ${APP_GROUP} (${DOCKER_GROUP_GID})"
   else
-    echo "Docker group not found, create AMP Group"
+    if ! getent group ${GID} > /dev/null 2>&1; then
+      echo "Creating AMP group with GID ${GID}..."
+      addgroup --gid ${GID} amp
+    fi
+    usermod -a -G amp ${APP_USER}
+    APP_GROUP=$(getent group ${GID} | awk -F ":" '{ print $1 }')
+    echo "AMP group ready: ${APP_GROUP} (${GID})"
   fi
-  # if not provided, use a default GID
-  if ! getent group ${GID} > /dev/null 2>&1; then
-    echo "Creating AMP group..."
-    addgroup --gid ${GID} amp
-  fi
-  APP_GROUP=$(getent group ${GID} | awk -F ":" '{ print $1 }')
-  echo "Group Created: ${APP_GROUP} (${GID})"
 }
 
 handle_error() {
