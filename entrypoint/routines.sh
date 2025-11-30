@@ -105,20 +105,15 @@ configure_release_stream() {
 
 # Configure ADS defaults for new instances
 configure_ads_defaults() {
-  local provision_settings=""
-  # Apply licence key to new instances if provided
   if [ -n "${AMP_LICENCE}" ]; then
-    echo "Applying AMP licence key to ADS defaults."
-    provision_settings+="ADSModule.Defaults.NewInstanceKey=${AMP_LICENCE};"
-  fi
-  # Apply the settings if any were specified
-  if [ -n "${provision_settings}" ]; then
-    if ! run_amp_command "ReconfigureInstance ADS01 \"${provision_settings}\""; then
-      echo "Warning: Failed to apply ADS default settings (${provision_settings})."
+    echo "Reactivating AMP licence across instances."
+    if run_amp_command_silently() "ReactivateAll \"${AMP_LICENCE}\"" >/dev/null; then
+      echo "Licence reactivated successfully."
+    else
+      echo "Warning: Failed to reactivate licence."
     fi
   fi
 }
-
 
 # Configure timezone
 configure_timezone() {
