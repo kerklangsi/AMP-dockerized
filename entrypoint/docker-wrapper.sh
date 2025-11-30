@@ -30,13 +30,47 @@ decode_mount_path() {
 
 # Detect host mount prefix for the container prefix
 detect_host_prefix() {
+  local container_name
+  container_name="${HOSTNAME:-}"
+  if [ -n "$container_name" ] && [ -S "/var/run/docker.sock" ] && [ -x "$REAL_DOCKER" ]; then
+    if command -v jq >/dev/null 2>&1; then
+      local inspect_json
+      if inspect_json=$("$REAL_DOCKER" inspect "$container_name" 2>/dev/null); then
+        local source
+        source=$(echo "$inspect_json" | jq -r '.[]?.Mounts[]? | select(.Destination=="/home/amp") | .Source' | head -n1)
+        if [ -n "$source" ] && [ "$source" != "null" ]; then
+          echo "$source"
+          return
+        fi
+      fi
+    fi
+  fi
+
   local mount_line
-  mount_line=$(awk -v mp="$CONTAINER_PREFIX" '$5==mp {print $4; exit}' /proc/self/mountinfo 2>/dev/null || true)
-  if [ -z "$mount_line" ] || [ "$mount_line" = "/" ]; then
+  mount_line=$(awk -v mp="$CONTAINER_PREFIX" '$5==mp {print; exit}' /proc/self/mountinfo 2>/dev/null || true)
+  if [ -z "$mount_line" ]; then
     echo ""
     return
   fi
-  decode_mount_path "$mount_line"
+  # Prefer the mount source (field after the dash) when available
+  local after_dash="${mount_line#*- }"
+  local source=""
+  if [ "$after_dash" != "$mount_line" ]; then
+    source=$(echo "$after_dash" | awk '{print $2}')
+  fi
+  # Check if source is a valid path (not a device or special mount)
+  if [ -n "$source" ] && [ "$source" != "none" ] && [ "$source" != "$CONTAINER_PREFIX" ]; then
+    decode_mount_path "$source"
+    return
+  fi
+  # Fall back to the root field (4th column) for other mount types
+  local root_field
+  root_field=$(echo "$mount_line" | awk '{print $4}')
+  if [ -z "$root_field" ] || [ "$root_field" = "/" ]; then
+    echo ""
+    return
+  fi
+  decode_mount_path "$root_field"
 }
 
 # Determine HOST_PREFIX
