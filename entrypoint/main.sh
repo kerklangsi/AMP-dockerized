@@ -18,6 +18,8 @@ source /opt/entrypoint/routines.sh
 trap 'handle_error' ERR
 trap_with_arg 'shutdown' INT TERM HUP QUIT KILL
 
+SOCAT_PID=""
+
 # Set JAVA_HOME based on architecture
 detect_architecture() {
     if [ "$(uname -m)" = "aarch64" ]; then
@@ -50,6 +52,8 @@ configure_main_instance
 configure_release_stream
 
 configure_ads_defaults
+
+setup_main_port_proxy
 
 if [ "${AMP_AUTO_UPDATE}" = "true" ]; then
   upgrade_instances

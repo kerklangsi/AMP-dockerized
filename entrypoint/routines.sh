@@ -107,13 +107,14 @@ configure_release_stream() {
 configure_ads_defaults() {
   if [ -n "${AMP_LICENCE}" ]; then
     echo "Reactivating AMP licence across instances."
-    if run_amp_command_silently() "ReactivateAll \"${AMP_LICENCE}\"" >/dev/null; then
-      echo "Licence reactivated successfully."
+    if run_amp_command "--silent ReactivateAll \"${AMP_LICENCE}\"" >/dev/null; then
+      echo "Successfully reactivated licence."
     else
-      echo "Warning: Failed to reactivate licence."
+      echo "Warning: Failed to reactivate AMP instances with licence key."
     fi
   fi
 }
+
 
 # Configure timezone
 configure_timezone() {
@@ -179,6 +180,65 @@ create_amp_user() {
   echo "AMP User: ${APP_USER} , Group: ${APP_GROUP}"
 }
 
+setup_main_port_proxy() {
+  local listen_port="${PORT:-8080}"
+  local target_host="${AMP_REMOTE_PROXY_HOST}"
+  local target_port="${AMP_REMOTE_PROXY_PORT}"
+
+  if [ -n "${target_host}" ]; then
+    if [ -z "${target_port}" ]; then
+      target_port="${listen_port}"
+    fi
+  else
+    local main_instance
+    main_instance=$(get_main_instance_name)
+    if [ -z "${main_instance}" ] || [ "${main_instance}" = "null" ]; then
+      return
+    fi
+
+    local instance_info url actual_port
+    instance_info=$(run_amp_command "ShowInstanceInfo \"${main_instance}\"") || return
+    url=$(echo "${instance_info}" | grep -oE 'https?://[^[:space:]]+' | head -n1)
+    if [ -z "${url}" ]; then
+      return
+    fi
+
+    actual_port=$(echo "${url}" | sed -n 's#.*:\([0-9]\+\)/.*#\1#p')
+    if [ -z "${actual_port}" ]; then
+      return
+    fi
+
+    if [ "${actual_port}" = "${listen_port}" ]; then
+      return
+    fi
+
+    target_host="127.0.0.1"
+    target_port="${actual_port}"
+  fi
+
+  if [ -z "${target_host}" ] || [ -z "${target_port}" ]; then
+    return
+  fi
+
+  if [ "${target_host}" = "127.0.0.1" ] && [ "${target_port}" = "${listen_port}" ]; then
+    return
+  fi
+
+  if ! command -v socat >/dev/null 2>&1; then
+    echo "Warning: socat not available; cannot proxy AMP remote API from ${listen_port} to ${target_host}:${target_port}."
+    return
+  fi
+
+  echo "Forwarding AMP requests on TCP ${listen_port} to ${target_host}:${target_port}."
+  socat TCP-LISTEN:${listen_port},fork,reuseaddr TCP:${target_host}:${target_port} &
+  SOCAT_PID=$!
+  sleep 0.2
+  if ! kill -0 "${SOCAT_PID}" >/dev/null 2>&1; then
+    echo "Warning: failed to establish AMP port proxy on ${listen_port}."
+    SOCAT_PID=""
+  fi
+}
+
 # Error handler
 handle_error() {
   # Prints a nice error message and exits.
@@ -217,6 +277,13 @@ shutdown() {
   echo "Shutting down... (Signal ${1})"
   if [ -n "${AMP_STARTED}" ] && [ "${AMP_STARTED}" -eq 1 ] && [ "${1}" != "KILL" ]; then
     stop_amp
+  fi
+  if [ -n "${SOCAT_PID}" ]; then
+    if kill -0 "${SOCAT_PID}" >/dev/null 2>&1; then
+      echo "Stopping AMP port proxy (PID ${SOCAT_PID})..."
+      kill "${SOCAT_PID}" >/dev/null 2>&1 || true
+      wait "${SOCAT_PID}" >/dev/null 2>&1 || true
+    fi
   fi
   exit 0
 }
