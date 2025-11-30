@@ -152,14 +152,6 @@ Example: `TZ=America/Denver`
 | `USERNAME` | The username of the admin user created on first boot.                                                                                                   | `admin`       |
 | `PASSWORD` | The password of the admin user. This value is only used when creating the new user. If you use the default value, please change it after first sign-in. | `password`    |
 
-### Remote Proxy
-| Name | Description | Default Value |
-|------|-------------|---------------|
-| `AMP_REMOTE_PROXY_HOST` | Optional host to forward AMP web and remote API traffic to. Set this if `remote/<token>` on this container should reach another machine. Leave empty to disable. | *(unset)* |
-| `AMP_REMOTE_PROXY_PORT` | Destination port for the proxy target. Defaults to the container's `PORT` when not specified. | *(unset)* |
-
-When these values are provided the entrypoint launches a lightweight TCP proxy (via `socat`) that listens on the container's `PORT` and forwards the traffic to `AMP_REMOTE_PROXY_HOST:AMP_REMOTE_PROXY_PORT`. Leave both unset to allow AMP to manage its own ports normally.
-
 ### Auto-Update
 | Name              | Description                                                                                     | Default Value |
 |-------------------|-------------------------------------------------------------------------------------------------|---------------|
