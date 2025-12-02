@@ -135,7 +135,6 @@ create_group_user() {
     fi
   else
     echo "docker socket and DOCKER_HOST not found. Using default AMP GID: ${AMP_GID}"
-    echo "docker socket and DOCKER_HOST not found. Using default AMP GID: ${AMP_GID}"
   fi
 
   # Docker group detected
