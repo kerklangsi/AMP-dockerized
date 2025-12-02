@@ -168,8 +168,8 @@ create_group_user() {
     APP_GROUP=amp
     export APP_GROUP
   fi
-  APP_GROUP_GID=$(getent group ${APP_GROUP} | awk -F ":" '{ print $3 }')
-  echo "Group Created: ${APP_GROUP} (${APP_GROUP_GID})"
+  APP_GID=$(getent group ${APP_GROUP} | awk -F ":" '{ print $3 }')
+  echo "Group Created: ${APP_GROUP} (${APP_GID})"
 }
 
 # AMP user/group
