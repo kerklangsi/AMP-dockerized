@@ -46,9 +46,22 @@ check_data_volume() {
   echo "Data volume is ok!"
 }
 
+# Configure file permissions
 check_file_permissions() {
   echo "Checking file permissions..."
   chown -R ${APP_USER}:${APP_GROUP} /home/amp
+  if [ -w /home/amp ]; then
+    echo "File permissions set for ${APP_USER}:${APP_GROUP}. Directory /home/amp is writable."
+  else
+    echo "Warning: Directory /home/amp is not writable for ${APP_USER}:${APP_GROUP}."
+    # Attempt to align permissions if ownership alone is insufficient
+    chmod 755 /home/amp
+    if [ -w /home/amp ]; then
+      echo "Permissions updated. Directory /home/amp is now writable for ${APP_USER}:${APP_GROUP}."
+    else
+      echo "Warning: Directory /home/amp remains non-writable for ${APP_USER}:${APP_GROUP}."
+    fi
+  fi
 }
 
 configure_main_instance() {
@@ -99,31 +112,49 @@ configure_timezone() {
   dpkg-reconfigure --frontend noninteractive tzdata
 }
 
+# AMP user/group
 create_amp_user() {
-  echo "Creating AMP group..."
-  if [ ! "$(getent group ${GID})" ]; then
-    # Create group
-    addgroup \
-    --gid ${GID} \
-    amp
+  local AMP_GID="${GID}"
+  local DOCKER_GROUP_GID="${DOCKER_GID}"
+  # try to DOCKER_GROUP_GID detect from docker socket
+  if [ -z "${DOCKER_GROUP_GID}" ] && [ -S "/var/run/docker.sock" ]; then
+    DOCKER_GROUP_GID=$(stat -c '%g' /var/run/docker.sock)
+    if [ "${DOCKER_GROUP_GID}" = "0" ]; then
+      echo "Docker socket owned by root group. Not using docker group."
+      DOCKER_GROUP_GID=""
+    else
+      echo "Detected docker socket GID: ${DOCKER_GROUP_GID}"
+    fi
+  # Else, use AMP_GID
+  else
+    echo "docker socket not found. Using default AMP GID: ${AMP_GID}"
   fi
-  APP_GROUP=$(getent group ${GID} | awk -F ":" '{ print $1 }')
-  echo "Group Created: ${APP_GROUP} (${GID})"
-
+  # Create AMP user
   echo "Creating AMP user..."
-  if [ ! "$(getent passwd ${UID})" ]; then
-    # Create user
-    adduser \
-      --uid ${UID} \
-      --shell /bin/bash \
-      --no-create-home \
-      --disabled-password \
-      --gecos "" \
-      --ingroup ${APP_GROUP} \
-      amp
+  if ! getent passwd ${UID} > /dev/null 2>&1; then
+    adduser --uid ${UID} --shell /bin/bash --no-create-home --disabled-password --gecos "" amp
   fi
   APP_USER=$(getent passwd ${UID} | awk -F ":" '{ print $1 }')
   echo "User Created: ${APP_USER} (${UID})"
+  # Create/use docker group if DOCKER_GROUP_GID is set
+  if [ ! -z "${DOCKER_GROUP_GID}" ]; then
+    if ! getent group ${DOCKER_GROUP_GID} > /dev/null 2>&1; then
+      echo "Creating docker group with GID ${DOCKER_GROUP_GID}..."
+      addgroup --gid ${DOCKER_GROUP_GID} docker
+    fi
+    usermod -a -G docker ${APP_USER}
+    APP_GROUP=docker
+    echo "Docker group created: ${APP_GROUP} (${DOCKER_GROUP_GID})"
+  # Otherwise, create/use amp group
+  else
+    if ! getent group ${AMP_GID} > /dev/null 2>&1; then
+      echo "Creating AMP group with GID ${AMP_GID}..."
+      addgroup --gid ${AMP_GID} amp
+    fi
+    usermod -a -G amp ${APP_USER}
+    APP_GROUP=amp
+    echo "AMP group created: ${APP_GROUP} (${AMP_GID})"
+  fi
 }
 
 # Reactivates the AMP licence across all instances
@@ -138,6 +169,35 @@ configure_license() {
   fi
 }
 
+# Detects and sets AMP_HOST_HOME environment variable
+amp_host_home() {
+  # If AMP_HOST_HOME is already set externally, do nothing.
+  if [ -n "${AMP_HOST_HOME}" ]; then
+    return
+  fi
+  # Ensure Docker CLI is available
+  if command -v docker >/dev/null 2>&1; then
+    # Try to detect the host directory via docker inspect
+    local docker_name=""
+    local docker_mount=""
+    docker_name=$(docker ps --filter "volume=/home/amp" --format "{{.Names}}")
+    docker_mount=$(docker inspect "$docker_name" --format '{{range .Mounts}}{{if eq .Destination "/home/amp"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || true)
+    if [ -n "$docker_mount" ]; then
+      AMP_HOST_HOME="$docker_mount"
+      export AMP_HOST_HOME
+    else
+      echo "Warning: docker inspect did not return a mount source for $docker_name"
+    fi
+  fi
+  # Report the detected host directory
+  if [ -n "${AMP_HOST_HOME}" ]; then
+    echo "AMP data mount source: ${AMP_HOST_HOME}"
+  else
+    echo "AMP data mount source: unknown"
+  fi
+}
+
+# Handles errors during startup
 handle_error() {
   # Prints a nice error message and exits.
   # Usage: handle_error "Error message"
@@ -150,6 +210,7 @@ handle_error() {
   exit 1
 }
 
+# Monitors AMP for pending tasks
 monitor_amp() {
   # Periodically process pending tasks (e.g. upgrade, reboots, ...)
   while true; do
@@ -158,6 +219,7 @@ monitor_amp() {
   done
 }
 
+# Runs user-provided startup script
 run_startup_script() {
   # Users may provide their own startup script for installing dependencies, etc.
   STARTUP_SCRIPT="/home/amp/scripts/startup.sh"
@@ -168,6 +230,7 @@ run_startup_script() {
   fi
 }
 
+# Shuts down AMP
 shutdown() {
   echo "Shutting down... (Signal ${1})"
   if [ -n "${AMP_STARTED}" ] && [ "${AMP_STARTED}" -eq 1 ] && [ "${1}" != "KILL" ]; then
@@ -176,6 +239,7 @@ shutdown() {
   exit 0
 }
 
+# Starts AMP
 start_amp() {
   echo "Starting AMP..."
   run_amp_command "StartBoot"
@@ -183,12 +247,14 @@ start_amp() {
   echo "AMP Started!"
 }
 
+# Stops AMP
 stop_amp() {
   echo "Stopping AMP..."
   run_amp_command "StopAll"
   echo "AMP Stopped."
 }
 
+# Upgrades all instances
 upgrade_instances() {
   echo "Upgrading instances..."
   run_amp_command "UpgradeAll" | consume_progress_bars

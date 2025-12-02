@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# Utility functions for AMP Dockerized
 consume_progress_bars() {
   # See https://github.com/MitchTalmadge/AMP-dockerized/issues/25#issuecomment-670251321
   grep --line-buffered -v -E '\[[-#]+\]'
@@ -18,6 +19,7 @@ get_main_instance_name() {
   fi
 }
 
+# Check if main instance exists
 does_main_instance_exist() {
   local main_name
   main_name=$(get_main_instance_name)
@@ -27,14 +29,17 @@ does_main_instance_exist() {
   return 0
 }
 
+# Run AMP command as APP_USER
 run_amp_command() {
   su ${APP_USER} --command "ampinstmgr $1"
 }
 
+# Run AMP command as APP_USER silently
 run_amp_command_silently() {
   su ${APP_USER} --command "ampinstmgr --silent $1"
 }
 
+# Trap with argument
 trap_with_arg() {
   # Credit https://stackoverflow.com/a/2183063/2364405
   func="$1" ; shift
