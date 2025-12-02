@@ -49,6 +49,8 @@ configure_main_instance
 
 configure_release_stream
 
+configure_license
+
 if [ "${AMP_AUTO_UPDATE}" = "true" ]; then
   upgrade_instances
 else

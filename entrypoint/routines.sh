@@ -126,6 +126,18 @@ create_amp_user() {
   echo "User Created: ${APP_USER} (${UID})"
 }
 
+# Reactivates the AMP licence across all instances
+configure_license() {
+  if [ -n "${AMP_LICENCE}" ]; then
+    echo "Reactivating AMP licence across instances."
+    if run_amp_command_silently "ReactivateAll \"${AMP_LICENCE}\"" >/dev/null 2>&1; then
+      echo "Licence reactivated successfully."
+    else
+      echo "Warning: Failed to reactivate licence."
+    fi
+  fi
+}
+
 handle_error() {
   # Prints a nice error message and exits.
   # Usage: handle_error "Error message"
