@@ -160,9 +160,6 @@ create_group_user() {
     export APP_GROUP
 
   # AMP_GID is used
-    export APP_GROUP
-
-  # AMP_GID is used
   else
     if ! getent group ${AMP_GID} > /dev/null 2>&1; then
       echo "Creating AMP group with GID ${AMP_GID}..."
