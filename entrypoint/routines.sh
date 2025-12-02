@@ -113,7 +113,6 @@ configure_timezone() {
 }
 
 create_group_user() {
-create_group_user() {
   local AMP_GID="${GID}"
   local GROUP_GID="${DOCKER_GID}"
   local DOCKER_DESKTOP=""
