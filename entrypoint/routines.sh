@@ -113,6 +113,7 @@ configure_timezone() {
 }
 
 create_group_user() {
+create_group_user() {
   local AMP_GID="${GID}"
   local GROUP_GID="${DOCKER_GID}"
   local DOCKER_DESKTOP=""
@@ -134,6 +135,7 @@ create_group_user() {
       echo "DOCKER_HOST is set but does not appear to be Docker Desktop remote API."
     fi
   else
+    echo "docker socket and DOCKER_HOST not found. Using default AMP GID: ${AMP_GID}"
     echo "docker socket and DOCKER_HOST not found. Using default AMP GID: ${AMP_GID}"
   fi
 
@@ -160,12 +162,35 @@ create_group_user() {
     export APP_GROUP
 
   # AMP_GID is used
+    export APP_GROUP
+
+  # AMP_GID is used
   else
     if ! getent group ${AMP_GID} > /dev/null 2>&1; then
       echo "Creating AMP group with GID ${AMP_GID}..."
       addgroup --gid ${AMP_GID} amp
     fi
     APP_GROUP=amp
+    export APP_GROUP
+  fi
+  APP_GID=$(getent group ${APP_GROUP} | awk -F ":" '{ print $3 }')
+  echo "Group Created: ${APP_GROUP} (${APP_GID})"
+}
+
+# AMP user/group
+create_amp_user() {
+  # Create AMP user
+  echo "Creating AMP user..."
+  if ! getent passwd ${UID} > /dev/null 2>&1; then
+    adduser --uid ${UID} --shell /bin/bash --no-create-home --disabled-password --gecos "" --ingroup ${APP_GROUP} amp
+    deluser amp users 2>/dev/null || true
+  fi
+  APP_USER=$(getent passwd ${UID} | awk -F ":" '{ print $1 }')
+  echo "User Created: ${APP_USER} (${UID})"
+
+  # Verify user details
+  echo "Verifying AMP user details..."
+  echo "$(id ${APP_USER})"
     export APP_GROUP
   fi
   APP_GID=$(getent group ${APP_GROUP} | awk -F ":" '{ print $3 }')

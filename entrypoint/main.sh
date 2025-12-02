@@ -39,6 +39,8 @@ fi
 
 run_startup_script
 
+create_group_user
+
 create_amp_user
 
 configure_timezone
