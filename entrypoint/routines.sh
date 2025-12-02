@@ -112,10 +112,10 @@ configure_timezone() {
   dpkg-reconfigure --frontend noninteractive tzdata
 }
 
-# AMP user/group
-create_amp_user() {
+create_group_user() {
   local AMP_GID="${GID}"
   local DOCKER_GROUP_GID="${DOCKER_GID}"
+  local DOCKER_DESKTOP=""
   # try to DOCKER_GROUP_GID detect from docker socket
   if [ -z "${DOCKER_GROUP_GID}" ] && [ -S "/var/run/docker.sock" ]; then
     DOCKER_GROUP_GID=$(stat -c '%g' /var/run/docker.sock)
@@ -125,36 +125,67 @@ create_amp_user() {
     else
       echo "Detected docker socket GID: ${DOCKER_GROUP_GID}"
     fi
-  # Else, use AMP_GID
+  # try to detect Docker Desktop remote API via DOCKER_HOST
+  elif [ -z "${DOCKER_GROUP_GID}" ] && [ -n "${DOCKER_HOST}" ]; then
+    if echo "${DOCKER_HOST}" | grep -qi '^tcp://host\.docker\.internal:2375'; then
+      echo "Docker Desktop remote host detected via DOCKER_HOST."
+      DOCKER_DESKTOP="1"
+    else
+      echo "DOCKER_HOST is set but does not appear to be Docker Desktop remote API."
+    fi
   else
-    echo "docker socket not found. Using default AMP GID: ${AMP_GID}"
+    echo "docker socket and DOCKER_HOST not found. Using default AMP GID: ${AMP_GID}"
   fi
-  # Create AMP user
-  echo "Creating AMP user..."
-  if ! getent passwd ${UID} > /dev/null 2>&1; then
-    adduser --uid ${UID} --shell /bin/bash --no-create-home --disabled-password --gecos "" amp
-  fi
-  APP_USER=$(getent passwd ${UID} | awk -F ":" '{ print $1 }')
-  echo "User Created: ${APP_USER} (${UID})"
-  # Create/use docker group if DOCKER_GROUP_GID is set
-  if [ ! -z "${DOCKER_GROUP_GID}" ]; then
+
+  # Docker group detected
+  if getent group docker > /dev/null 2>&1; then
+    APP_GROUP=docker
+    export APP_GROUP
+  # Docker Desktop remote API detected
+  elif [ "${DOCKER_DESKTOP}" = "1" ]; then
+    if ! getent group docker > /dev/null 2>&1; then
+      echo "Creating docker group for Docker Desktop remote API..."
+      addgroup --system docker
+    fi
+    APP_GROUP=docker
+    export APP_GROUP
+
+  # DOCKER_GROUP_GID is available
+  elif [ -n "${DOCKER_GROUP_GID}" ]; then
     if ! getent group ${DOCKER_GROUP_GID} > /dev/null 2>&1; then
       echo "Creating docker group with GID ${DOCKER_GROUP_GID}..."
       addgroup --gid ${DOCKER_GROUP_GID} docker
     fi
-    usermod -a -G docker ${APP_USER}
     APP_GROUP=docker
-    echo "Docker group created: ${APP_GROUP} (${DOCKER_GROUP_GID})"
-  # Otherwise, create/use amp group
+    export APP_GROUP
+
+  # AMP_GID is used
   else
     if ! getent group ${AMP_GID} > /dev/null 2>&1; then
       echo "Creating AMP group with GID ${AMP_GID}..."
       addgroup --gid ${AMP_GID} amp
     fi
-    usermod -a -G amp ${APP_USER}
     APP_GROUP=amp
-    echo "AMP group created: ${APP_GROUP} (${AMP_GID})"
+    export APP_GROUP
   fi
+  APP_GROUP_GID=$(getent group ${APP_GROUP} | awk -F ":" '{ print $3 }')
+  echo "Group Created: ${APP_GROUP} (${APP_GROUP_GID})"
+}
+
+# AMP user/group
+create_amp_user() {
+  # Create AMP user
+  echo "Creating AMP user..."
+  if ! getent passwd ${UID} > /dev/null 2>&1; then
+    adduser --uid ${UID} --shell /bin/bash --no-create-home --disabled-password --gecos "" --ingroup ${APP_GROUP} amp
+    deluser amp users 2>/dev/null || true
+  fi
+  APP_USER=$(getent passwd ${UID} | awk -F ":" '{ print $1 }')
+  echo "User Created: ${APP_USER} (${UID})"
+
+  # Verify user details
+  echo "Verifying AMP user details..."
+  echo "$(id ${APP_USER})"
 }
 
 # Reactivates the AMP licence across all instances
