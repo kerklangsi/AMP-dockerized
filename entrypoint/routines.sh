@@ -116,7 +116,7 @@ create_group_user() {
   local AMP_GID="${GID}"
   local GROUP_GID="${DOCKER_GID}"
   local DOCKER_DESKTOP=""
-  # try to GROUP_GID detect from docker socket
+  # Try to detect docker socket GID
   if [ -z "${GROUP_GID}" ] && [ -S "/var/run/docker.sock" ]; then
     GROUP_GID=$(stat -c '%g' /var/run/docker.sock)
     if [ "${GROUP_GID}" = "0" ]; then
