@@ -186,8 +186,7 @@ create_amp_user() {
   # Verify user details
   echo "Verifying AMP user details..."
   echo "$(id ${APP_USER})"
-    export APP_GROUP
-  fi
+  export APP_GROUP
   APP_GID=$(getent group ${APP_GROUP} | awk -F ":" '{ print $3 }')
   echo "Group Created: ${APP_GROUP} (${APP_GID})"
 }
